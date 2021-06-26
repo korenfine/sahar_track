@@ -1,3 +1,4 @@
+`
 <html dir="rtl">
 <head>
     <meta charset="utf-8">
@@ -77,16 +78,96 @@
     var app = new Vue({
         el: '#app',
         data: {
+            db: null,
             records: []
+        },
+        mounted() {
+            const self = this
+
+            // Open our database; it is created if it doesn't already exist
+            // (see onupgradeneeded below)
+            let request = window.indexedDB.open('sahar_actions', 1);
+
+            // onerror handler signifies that the database didn't open successfully
+            request.onerror = function () {
+                console.log('Database failed to open');
+            };
+
+            // onsuccess handler signifies that the database opened successfully
+            request.onsuccess = function () {
+                console.log('Database opened successfully');
+
+                // Store the opened database object in the db variable. This is used a lot below
+                self.db = request.result;
+
+                // Run the displayData() function to display the notes already in the IDB
+                let objectStore = self.db.transaction('sahar_actions').objectStore('sahar_actions');
+                objectStore.openCursor().onsuccess = function (e) {
+                    // Get a reference to the cursor
+                    let cursor = e.target.result;
+
+                    console.log(cursor)
+                    // If there is still another data item to iterate through, keep running this code
+                    if (cursor) {
+                        const record = {
+                            date: cursor.value.date,
+                            action: cursor.value.action,
+                            color: cursor.value.color,
+                        }
+
+                        self.records.unshift(record)
+
+                        cursor.continue();
+                    }
+                };
+            };
+
+            // Setup the database tables if this has not already been done
+            request.onupgradeneeded = function (e) {
+                // Grab a reference to the opened database
+                let db = e.target.result;
+
+                // Create an objectStore to store our notes in (basically like a single table)
+                // including a auto-incrementing key
+                let objectStore = db.createObjectStore('sahar_actions', {keyPath: 'id', autoIncrement: true});
+
+                // Define what data items the objectStore will contain
+                objectStore.createIndex('date', 'date', {unique: false});
+                objectStore.createIndex('action', 'action', {unique: false});
+                objectStore.createIndex('color', 'color', {unique: false});
+            }
         },
         methods: {
             addAction(action, color) {
-                this.records.unshift({
-                    date: (new Date()).toLocaleString('he'), action, color
-                })
+                let newItem = {date: (new Date()).toLocaleString('he'), action, color};
+
+                this.records.unshift(newItem)
+
+                // open a read/write db transaction, ready for adding the data
+                let transaction = this.db.transaction(['sahar_actions'], 'readwrite');
+
+                // call an object store that's already been added to the database
+                let objectStore = transaction.objectStore('sahar_actions');
+
+                // Make a request to add our newItem object to the object store
+                let request = objectStore.add(newItem);
+                request.onsuccess = function () {
+                    console.log('add success')
+                };
+
+                // Report on the success of the transaction completing, when everything is done
+                transaction.oncomplete = function () {
+                    console.log('Transaction completed: database modification finished.');
+                };
+
+                transaction.onerror = function () {
+                    console.log('Transaction not opened due to error');
+                };
+
             }
         }
     })
 </script>
 </body>
 </html>
+`
